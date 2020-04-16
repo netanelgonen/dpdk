@@ -396,6 +396,105 @@ mlx5_devx_cmd_query_hca_vdpa_attr(void *ctx,
 	}
 }
 
+
+int
+mlx5_devx_cmd_query_flex_parse_graph(struct mlx5_devx_obj *flex_obj,
+			   struct mlx5_devx_flex_attr *attr)
+{
+	uint32_t in[MLX5_ST_SZ_DW(general_obj_in_cmd_hdr)] = {0};
+	uint32_t out[MLX5_ST_SZ_DW(query_flex_parser_out)] = {0};
+	void *hdr = MLX5_ADDR_OF(query_flex_parser_out, in, hdr);
+	void *flex = MLX5_ADDR_OF(query_flex_parser_out, out, flex);
+	int ret;
+
+	MLX5_SET(general_obj_in_cmd_hdr, hdr, opcode,
+		 MLX5_CMD_OP_QUERY_GENERAL_OBJECT);
+	MLX5_SET(general_obj_in_cmd_hdr, hdr, obj_type,
+		 MLX5_GENERAL_OBJ_TYPE_VIRTQ);
+	MLX5_SET(general_obj_in_cmd_hdr, hdr, obj_id, flex_obj->id);
+	ret = mlx5_glue->devx_obj_query(flex_obj->obj, in, sizeof(in),
+					 out, sizeof(out));
+	if (ret) {
+		DRV_LOG(ERR, "Failed to modify VIRTQ using DevX.");
+		rte_errno = errno;
+		return -errno;
+	}
+	attr->index = MLX5_GET16(virtio_net_q, virtq, //***
+					      hw_available_index);
+	attr->hw_used_index = MLX5_GET16(virtio_net_q, virtq, hw_used_index); //***
+	return ret;
+}
+
+
+
+int
+mlx5_devx_cmd_set_flex_parser(struct ibv_context *ctx,
+			     	 	 	  struct flex_data *data)
+{
+	struct mlx5_hca_attr attr;
+	uint32_t in[MLX5_ST_SZ_DW(create_flex_parser_in)] = {0};
+	uint32_t out[MLX5_ST_SZ_DW(general_obj_out_cmd_hdr)] = {0};
+	struct mlx5_devx_obj *parse_flex_obj = rte_zmalloc(__func__,sizeof(*parse_flex_obj), 0);
+	void *flex = MLX5_ADDR_OF(create_flex_parser_in, in, flex);
+	void *hdr = MLX5_ADDR_OF(create_flex_parser_in, in, hdr);
+	void* in_arc = MLX5_ADDR_OF(parse_graph_flex_bits, flex, input_arc);
+	void* out_arc = MLX5_ADDR_OF(parse_graph_flex_bits, flex, ouput_arc);
+	if (status < 0)
+		return -1;
+	if (!attr.parse_graph_flex_node)
+		return -1; // not supported
+	MLX5_SET(general_obj_in_cmd_hdr, hdr, opcode,
+						MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
+	MLX5_SET(general_obj_in_cmd_hdr, hdr, obj_type,
+						MLX5_GENERAL_OBJ_TYPE_FLEX_PARSE_GRAPH);
+	MLX5_SET(mlx5_ifc_parse_graph_flex_bits, flex, header_length_fixed,
+						data->header_length_fixed);
+	MLX5_SET(mlx5_ifc_parse_graph_flex_bits, flex, header_length,
+							data->header_length);
+	MLX5_SET(mlx5_ifc_parse_graph_flex_bits, flex, header_length_field_offset,
+							data->header_length_field_offset);
+	MLX5_SET(mlx5_ifc_parse_graph_flex_bits, flex, header_length_field_size,
+							data->header_length_field_size);
+	MLX5_SET(mlx5_ifc_parse_graph_flex_bits, flex, flow_match_sample_en,
+							data->flow_match_sample_en);
+	MLX5_SET(mlx5_ifc_parse_graph_flex_bits, flex, flow_match_sample_field_offset,
+							data->flow_match_sample_field_offset);
+	MLX5_SET(mlx5_ifc_parse_graph_flex_bits, flex, Sample_outer_or_inner,
+							data->Sample_outer_or_inner);
+	MLX5_SET(mlx5_ifc_parse_graph_flex_bits, flex, next_header_field_offset,
+							data->next_header_field_offset);
+	MLX5_SET(mlx5_ifc_parse_graph_flex_bits, flex, next_header_field_size,
+							data->next_header_field_size);
+	MLX5_SET(mlx5_ifc_parse_graph_flex_bits, flex, flow_match_sample_field_id,
+							data->flow_match_sample_field_id);
+	MLX5_SET(mlx5_ifc_parse_graph_arc, input_arc, compare_condition_value,
+							data->in_arc->compare_condition_value);
+	MLX5_SET(mlx5_ifc_parse_graph_arc, input_arc, start_inner_tunnel,
+							data->in_arc->start_inner_tunnel);
+	MLX5_SET(mlx5_ifc_parse_graph_arc, input_arc, arc_anchor,
+							data->in_arc->arc_anchor);
+	MLX5_SET(mlx5_ifc_parse_graph_arc, input_arc, parse_graph_node_handle,
+							data->in_arc->parse_graph_node_handle);
+	MLX5_SET(mlx5_ifc_parse_graph_arc,output_arc, compare_condition_value,
+							data->out_arc->compare_condition_value);
+	MLX5_SET(mlx5_ifc_parse_graph_arc, output_arc, start_inner_tunnel,
+							data->out_arc->start_inner_tunnel);
+	MLX5_SET(mlx5_ifc_parse_graph_arc, output_arc, arc_anchor,
+							data->out_arc->arc_anchor);
+	MLX5_SET(mlx5_ifc_parse_graph_arc, output_arc, parse_graph_node_handle,
+							data->out_arc->parse_graph_node_handle);
+ 	parse_flex_obj->obj = mlx5_glue->devx_obj_create(ctx, in, sizeof(in), out,
+ 						    sizeof(out));
+ 	if (!parse_flex_obj->obj) {
+ 		rte_errno = errno;
+ 		DRV_LOG(ERR, "Failed to create PARSE GRAPH FLEX Obj using DevX.");
+ 		rte_free(parse_flex_obj);
+ 		return NULL;
+ 	}
+ 	parse_flex_obj->id = MLX5_GET(general_obj_out_cmd_hdr, out, obj_id);
+ 	return parse_flex_obj;
+}
+
 /**
  * Query HCA attributes.
  * Using those attributes we can check on run time if the device
@@ -464,6 +563,9 @@ mlx5_devx_cmd_query_hca_attr(void *ctx,
 	attr->vdpa.valid = !!(MLX5_GET64(cmd_hca_cap, hcattr,
 					 general_obj_types) &
 			      MLX5_GENERAL_OBJ_TYPES_CAP_VIRTQ_NET_Q);
+	attr->parse_graph_flex_node = !!(MLX5_GET64(cmd_hca_cap, hcattr,
+					 general_obj_types) &
+			      MLX5_GENERAL_OBJ_TYPES_CAP_PARSE_GRAPH_FLEX_NODE);
 	if (attr->qos.sup) {
 		MLX5_SET(query_hca_cap_in, in, op_mod,
 			 MLX5_GET_HCA_CAP_OP_MOD_QOS_CAP |

@@ -949,6 +949,7 @@ enum {
 
 enum {
 	MLX5_GENERAL_OBJ_TYPES_CAP_VIRTQ_NET_Q = (1ULL << 0xd),
+	MLX5_GENERAL_OBJ_TYPES_CAP_PARSE_GRAPH_FLEX_NODE = (1ULL << 0x1c),
 };
 
 enum {
@@ -1388,6 +1389,66 @@ struct mlx5_ifc_query_hca_cap_in_bits {
 	u8 op_mod[0x10];
 	u8 reserved_at_40[0x40];
 };
+
+struct mlx5_ifc_parse_graph_arc {
+	u8 start_inner_tunnel[0x1];
+	u8 arc_parse_graph_node[0x8];
+	u8 compare_condition_value[0x16]
+	u8 parse_graph_node_handle[0x20];
+};
+
+struct mlx5_ifc_parse_graph_flow_match_sample {
+	u8 flow_match_sample_en[0x1];
+	u8 flow_match_sample_offset_mode[0x4];
+	u8 flow_match_sample_field_offset[0x10];
+	u8 flow_match_sample_field_offset_shift[0x4];
+	u8 flow_match_sample_field_base_offset[0x8];
+	u8 flow_match_sample_tunnel_mode[0x3];
+	u8 flow_match_sample_field_offset_mask[0x20];
+	u8 flow_match_sample_field_id[0x20];
+};
+
+struct mlx5_ifc_parse_graph_flex_bits {
+	u8 header_length_base_value[0x10];
+	u8 header_length_field_shift[0x4];
+	u8 header_length_mode[0x4];
+	u8 header_length_field_offset[0x10];
+	u8 header_length_field_mask[0x20];
+	struct mlx5_ifc_parse_graph_flow_match_sample flow_match_table[0x8];
+	u8 header_length_field_size;
+	u8 next_header_field_offset;
+	u8 next_header_field_size:5;
+	struct mlx5_ifc_parse_graph_arc input_arc[0x8];
+	struct mlx5_ifc_parse_graph_arc output_arc[0x8];
+};
+
+struct mlx5_ifc_create_flex_parser_in_bits {
+	struct mlx5_ifc_general_obj_in_cmd_hdr_bits hdr;
+	struct mlx5_ifc_parse_graph_flex_bits flex;
+};
+
+struct mlx5_ifc_create_flex_parser_out_bits {
+	struct mlx5_ifc_general_obj_in_cmd_hdr_bits hdr;
+	struct mlx5_ifc_parse_graph_flex_bits flex;
+};
+
+struct mlx5_ifc_query_hca_cap_in_bits {
+	u8 opcode[0x10];
+	u8 reserved_at_10[0x10];
+	u8 reserved_at_20[0x10];
+	u8 op_mod[0x10];
+	u8 reserved_at_40[0x40];
+};
+
+struct mlx5_ifc_parse_graph_flex_out_bits {
+	u8 status[0x8];
+	u8 reserved_at_8[0x18];
+	u8 syndrome[0x20];
+	u8 reserved_at_40[0x40];
+	struct mlx5_ifc_parse_graph_flex_bits capability;
+};
+
+
 
 struct mlx5_ifc_mac_address_layout_bits {
 	u8 reserved_at_0[0x10];
@@ -2006,6 +2067,7 @@ struct mlx5_ifc_create_cq_in_bits {
 
 enum {
 	MLX5_GENERAL_OBJ_TYPE_VIRTQ = 0x000d,
+	MLX5_GENERAL_OBJ_TYPE_FLEX_PARSE_GRAPH = 0x000d,
 };
 
 struct mlx5_ifc_general_obj_in_cmd_hdr_bits {
